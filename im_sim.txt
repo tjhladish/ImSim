@@ -1,0 +1,122 @@
+﻿Outline
+I.	Abstract
+II.	Summary (non-technical)
+III.	Introduction
+	A.	Flu biology
+		i.	Time series (real)
+		ii.	Immunology
+	B.	Network epidemiology
+IV.	Results
+	A.	Time series (generated)
+	B.	Evolution of ES distribution
+	C.	Changing D
+	D.	Time series analysis
+V.	Discussion
+VI.	Materials/methods
+	A.	Analytical methods
+	B.	Computational methods
+		i.	Network construction
+		ii.	Percolation simulation
+	C.	Software
+
+
+I. 	Abstract
+
+The influenza virus is continually evolving so that the strains circulating in any given season will be different than those seen before or after. Upon recovering from flu, individuals acquire immunity; however resistance tends be short-lived, lasting only one or two seasons, because of the constant turnover in strains and the decay of immune response.  Immune individuals can indirectly protect large portions of the population by preventing chains of transmission that would otherwise occur, a phenomenon known as \it{herd immunity}. Thus the fate of an influenza outbreak will depend on the wake of immunity left by seasons past. The extent to which influenza inhibits itself via trans-seasonal herd immunity will depend on the structure of the host population, the infectivity of the virus, and the nature of immunity. Here, we introduce a network-based model of a seasonal, immunizing disease like influenza with which we can investigate the long-term immunological evolution of host population. Using a Markovian chain-like process, we derive the changing patterns of cross-immunity. We find that the probability of an epidemic dives and then quickly converges to a moderate value that depends on (a) the underlying structure of the network and (b) the duration of immunity, but is surprisingly insensitive to (c) the extent to which contact patterns change from one season to the next.  The practical implications are mixed: on the positive side, one can make reasonable predictions based simply on the \it{typical} distribution of contact rates (ignoring network dynamics); but on the negative side, the fate of any given outbreak is highly unpredictable as the distribution of epidemic sizes rapidly become broad and left-skewed.
+
+II.	Author Summary (for popular audience)
+
+Predicting the size of the next seasonal flu epidemic is one of the major problems human health officials grapple with each year.  Previous research has primarily focused on the predictability and expected size of single epidemics, but it is known that for influenza, the human acquired immune response plays an important role in dictating the size and frequency of subsequent epidemics.  Using a combination of mathematical and computational methods, we describe some of the interesting dynamics that arise from the interactions between seasonal flu and the human immune system.  Most importantly, we find that it may be possible to make good predictions about the likelihood and severity of next year's flu epidemic given good information about recent annual epidemics—information that is continually more available as surveillance methods improve.
+
+III.	Introduction
+	A.	Flu biology
+		i.	Time series (real)
+Influenza A (Family Orthomyxoviridae) is a common respiratory pathogen in mammals and digestive pathogen in birds.  Average human mortality rates for influenza are estimated to be 30,000 annually in the United States and 500,000 annually worldwide.  Attack rates are strongly seasonal, peaking in the winter months in both northern and southern hemispheres.  
+
+		ii.	Immunology
+Partial, long-term, acquired immunity; evolving virus, multiple subtypes.
+
+Herd immunity
+
+	B.	Network epidemiology
+Human populations may be represented as undirected networks of people (the nodes) and their contacts that can potentially transmit disease (the edges between nodes). What constitutes a contact is dependent on the disease; in the case of influenza, edges represent interactions like being coughed on or sharing food.  A node's degree is the number of contacts it has.  The degree distribution in a network can play a critical role in epidemic dynamics.
+
+IV.	Results
+
+	A. Time series
+Most of the findings in this paper are drawn from patterns in aggregated data, but it is still instructive to look at the outcomes of a single multi-season simulation.  Like the simulation depicted in Fig. 1, most simulations start with a large epidemic in season 1, followed by 4-6 years of low numbers of infected individuals.  Because the population has no acquired immunity at the beginning of the simulation, the epidemic in season 1 should be thought of as modeling an influenza pandemic in size and likelihood (given introduction of a pandemic strain).  Large epidemics tend to be followed by more years of outbreaks than do small epidemics because large epidemics increase the immunity for a large portion of the population, thereby decreasing incoming transmissibility.  This is reflected in the sharp decrease in R_zero following every large epidemic.  Outbreak seasons always follow large epidemics because R_zero (calculated as a property of the network; see Methods for details) is below 1: an outbreak cannot grow into an epidemic if the expected number of secondary infections from any given infected node is less than 1.  Typically, after one to a few years of “immunity” outbreaks, “stochastic” outbreaks may occur: an epidemic could have occurred based on the average level of immunity in the network, but perhaps patient zero was located in a poorly connected or unusually immune part of the network.
+
+	B. Evolution of ES Distribution
+
+Poster Fig 4 (converted to heat map?)
+In the first season, epidemics are both large and likely, due to the high level of susceptibility in the network.  In agreement with previous theoretical results, the probability of an epidemic is equal to expected number of individuals infected [citation], given that an epidemic occurred (92.3%).  In seasons 2, 3, and 4, the epidemic size distribution is still strongly bimodal, with the outbreak and epidemic modes having the same means as in season 1.  There is strong negative autocorrelation at this point: any epidemic that occurs in the first four seasons is necessarily large, and will result in sufficient herd immunity to prevent consecutive epidemics (== immunity outbreaks).  This interpretation is supported by the low R_zero value (x.xx, < 1) in the seasons immediately following a >90% epidemic.  Of course, in any given season, an epidemic might stochastically fail to occur (== stochastic outbreak), even when R_zero is sufficiently high.  When stochastic outbreaks occur consecutively--granted, uncommon in a network with high R_zero--it becomes possible to have a very large epidemic (>75% of the population), whether in season 4 or a much later season.
+
+The epidemic size distribution is still bimodal in season 5, but there are no very large epidemics.  Such epidemics are not impossible, but have a probability of only 3.5e-5 (= 0.077^4).  From season 5 through 8, the mean epidemic size increases as mean individual immunity, and therefore herd immunity, decays. Distribution shape becomes more complicated (more modes, each with a distinct variance) as the number of distinct epidemic histories increases.
+
+Throughout the first 20 seasons or so, we observe a damped oscillation in mean epidemic size.  As already discussed, the oscillations result from the negative feedback between epidemic size and herd immunity.  The oscillation is damped because modest epidemics are more likely than several stochastic outbreaks followed by a very large epidemic, and modest epidemics result in modest herd immunity, which in turn leads to continued modest epidemics.
+
+Moving beyond season 20, the simulations approach stationarity.  In any given simulation, no equilibrium or stable cycle is ever achieved (see time series plot); rather the epidemic size distribution for all simulations approaches equilibrium.  Negative autocorrelation of epidemic sizes in consecutive seasons results in a very heterogeneous epidemic size distribution.  Due to the shape (convex, asymptotically approaching zero; fig?) of the exponential decay function we use to model immunity, recent epidemics have a much greater impact on herd immunity than epidemics in the distant past.  Because the dynamics are damped, negatively autocorrelated, and distant epidemic history is irrelevant, the ES distribution at season 50 is heterogeneous and indistinguishable from the ES distribution at season 500 (fig?).
+
+	C.	Changing D
+
+
+Changing the immune decay parameter has important and sometimes non-intuitive effects on epidemic size.  
+
+As D increases (i.e. better acquired immunity), the average number of infected individuals at stationarity decreases.  During the same interval, however, mean ES decreases but not monotonically: epidemics actually get larger on [1.3, 1.7] [poster fig. 2].  In [poster fig. 3], all epidemic modes are decreasing over this interval, but the mean epidemic size is increasing because the smallest modes  disappear rather than simply shift left.  In network epidemic terms, this is because networks with a certain class of epidemic histories  are dropping below the epidemic threshold: the effective R_zero is decreasing from just above 1 to just below 1.  This counterintuitive result may provide an explanation for real-world situations where better average immunity results in larger (albeit less frequent) epidemics.
+
+
+
+	D.	Time series analysis
+
+
+V.	Discussion
+
+Epidemic history classes
+Networks with a given degree distribution with similar epidemic histories tend to have similar epidemic futures.  For some parameter values, (namely small D or low season number), the epidemic size distribution has very distinct modes, each of which can be attributed to a specific epidemic history class (e.g. no epi, big epi, small epi, small epi over the past four years).  The length of the relevant history is dependent on degree distribution and the immune decay function.
+
+The particular immune decay function chosen has important effects on the epidemic dynamics at stationarity, and is disease-dependent.  In the case of influenza, our immune decay function models the decreasing effectiveness of acquired immunity over time due to both pathogen evolution (antigens are changing) and the immune system's progressively poorer ability to identify past pathogens.  When the immune decay parameter D is 0, the host has no acquired immunity; as D approaches positive infinity, the modeled host approaches perfect acquired immunity.  We examined values of D on [1,10] because this range clearly contained real-world influenza epidemic dynamics: at D=1, annual, very large epidemics are virtually inevitable, whereas strictly small epidemics can occur at stationarity when D=10. The consequences of increasing D through this range are not completely intuitive. As D increases toward better acquired immunity, the average number of infected individuals at stationarity does decrease.  During the same interval, however, mean ES decreases but not monotonically: epidemics actually get larger on [1.3, 1.7] [poster fig. 2].  In [poster fig. 3], all epidemic modes are decreasing over this interval, but the mean epidemic size is increasing because the smallest modes  disappear rather than simply shift left.  In network epidemic terms, this is because networks with a certain class of epidemic histories  are dropping below the epidemic threshold: the effective R_zero is decreasing from just above 1 to just below 1.  This counterintuitive result may provide an explanation for real-world situations where better average immunity results in larger (albeit less frequent) epidemics.
+
+
+VI.	Methods
+
+In our model, all nodes have a disease state.  Possible states include “susceptible,” or capable of receiving disease from an infected neighbor with some probability; “infected,” or capable of transmitting disease to neighbor nodes; and “recovered,” or incapable of transmitting or receiving disease, due to immunity.
+
+In a naïve network that has never experienced disease, the probability of transmission (“transmissibility”) between an infected node and a susceptible neighbor is given by
+
+Eq. 1: T_naive = R0 / T_critical
+
+where R0 is a parameter of our model and can be thought of as the expected number of secondary infections caused by each infection early in an epidemic, and T_critical is the threshold transmissibility above which epidemics can occur and below which, only small outbreaks can occur.  In practice, the distinction between “outbreak” and “epidemic” can be difficult for small networks (10^1 – 10^2 individuals), but is generally straightforward for larger networks.  This is because the expected absolute  outbreak size is constant as network size varies, while for epidemics, it is instead the expected relative size that remains constant (assuming constant degree distribution).
+
+At the beginning of every simulated flu season, all nodes are in a susceptible state. The level of susceptibility (or conversely, immunity) for a given node is dependent only on the number of seasons (delta s) since the node was most recently infected.  Susceptibility is modeled as incoming transmissibility:
+
+Eq. 2: Ti_v = T_naive * e ^ (-D/delta s_v)
+
+where Ti_v is the incoming transmissibility for node v, delta s_v is the number of seasons since node v was most recently infected, and D is a non-negative immune decay parameter that determines how quickly a node loses its immunity.  If a node has never experienced infection, then delta s_v is infinite and the incoming transmissibility is simply T_naive.
+
+
+
+
+
+	B. Computational methods
+		i. Network generation
+
+Networks with 10e6 nodes were constructed using the urban degree distribution (unless otherwise noted) and the “modified matching” algorithm described by Milo et al (2004) to connect the nodes and remove self-loops and multi-edges.  As noted by Milo et al, this algorithm is fast but can introduce a subtle bias: feed-forward loops are slightly more common than one would expect in a randomly connected graph.  This bias is not a concern in the research presented here, however, because on average 186.0 (n=1000) edges are self-loops or multi-edges in a random urban network, regardless of network size.  In urban networks with 10e6 nodes, fewer than 0.012% of edges are expected to be self-loops or multi-edges.
+
+The urban degree distribution is bimodal with a mean of 16.75 and is based on census data obtained for Vancouver, Canada.
+
+		ii. Percolation simulation
+We use the following percolation simulation to model epidemics:
+
+Select a node at random (patient zero) and set its state to infected
+While there are nodes in the infected state, repeat the following:
+	For each infected node u:
+		For each susceptible neighbor v of node u:
+			Draw a Uniform[0,1) deviate and compare it to Ti_v
+			if Ti_v is greater, change the state of v to infected
+		Change the state of v to recovered
+Tally the number of recovered nodes, and change their states to susceptible in preparation for the next season
+
+	C. Software
+Mathematica was used for analytical calculations; network generation algorithms and epidemic simulations were implemented using an object-oriented C++ applications programming interface.  Figures were generated using R.
+
+
