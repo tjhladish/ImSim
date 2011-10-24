@@ -21,7 +21,7 @@ void generate_network(Network* net, MultiSeason_Sim* sim);
 void connect_network (Network* net);
 void read_observed_data(string filename, char sep, map<string, vector<float> > &data);
 double KS(vector<float>s1, vector<float>s2);
-double delta(map<string, vector<float> > s1, map<string, vector<float> > s2);
+vector<double> report_metrics(map<string, vector<float> > s1, map<string, vector<float> > s2);
 //double autocorrelation_score( vector<float>s1, vector<float>s2 );
 vector<double> autocorrelation_matrix( map<string, vector<float> >& data );
 
@@ -30,6 +30,19 @@ vector<double> autocorrelation_matrix( map<string, vector<float> >& data );
 
 float controlB[] = {1.26, 0.34, 0.70, 1.75, 50.57, 1.55, 0.08, 0.42, 0.50, 3.20, 0.15, 0.49, 0.95, 0.24, 1.37, 0.17, 6.98, 0.10, 0.94, 0.38 };
 float treatmentB[] = {2.37, 2.16, 14.82, 1.73, 41.04, 0.23, 1.32, 2.91, 39.41, 0.11, 27.44, 4.51, 0.51, 4.50, 0.18, 14.68, 4.66, 1.30, 2.06, 1.19};
+
+vector<float> flatten_map(map<string, vector<float> > data) {
+    vector<float> flat;
+    map<string, vector<float> >::iterator it;
+
+    for ( it = data.begin(); it != data.end(); it++ ) {
+        string loc = it->first;
+        for (unsigned int i = 0; i < data[loc].size(); i++) {
+            flat.push_back(data[loc][i]);
+        }
+    }
+    return flat;
+}
 
 void connect_network (Network* net) {
     if (dist == POI) {
@@ -51,12 +64,29 @@ void connect_network (Network* net) {
     }
 }
 
+double calculate_mean_effective_R (vector<float> epi_values, vector<float> Re_values, float threshold) {
+    int n = 0;
+    double running_sum = 0.0;
+    for ( unsigned int i = 0; i < epi_values.size(); i++) {
+        if (Re_values[i] > 1) {
+        //if (epi_values[i] > threshold) {
+            running_sum += Re_values[i];
+            n++;
+        }
+    }
+    if ( n == 0 ) {
+        return 0.0;
+    } else {
+        return running_sum / n;
+    }
+}
+
 void processCmdlineParameter(int argc, char* argv[] ) {
     //cerr << "Arguments provided: " << argc - 1 << endl;
     //cerr << "Argument order: burnin_seasons net_size R0 Ih p0_ct hosp_rate real_data_filename\n";
     if ( argc == 8 ) {  
 
-        int burnin = (int) atoi(argv[1]); 
+        burnin     = (int) atoi(argv[1]); 
         NET_SIZE   = (int) atoi(argv[2]); 
         R_zero     = (double) atof(argv[3]);
         dist       = (DistType) URB;
@@ -86,7 +116,6 @@ int main(int argc, char* argv[]) {
     map<string, vector<float> > R0_vals;
     map<string, vector<float> > obs_data; //string = location, float = incidence on [0,1]
     read_observed_data(observed_data_filename, ',', obs_data);
-    //cerr << "Generating network toplogy . . . ";
 
     // Header line
     //cerr << "# Network Season Epi_size P0_size R0\n";
@@ -112,11 +141,12 @@ int main(int argc, char* argv[]) {
                                     
             if (season >= burnin) {
                 // epi size in percent, reduced by hospitalization factor
-                // cerr << sim->epidemic_size() << endl;
                 const double transmitted_size = double(sim->epidemic_size() - patient_zero_ct)/(NET_SIZE - patient_zero_ct);
                 sim_data[loc][season - burnin] =  h * transmitted_size;
                 R0_vals[loc][season - burnin]  = new_R_zero;
+                //cerr << "* ";
             }
+            //cerr << burnin << " " << season << " " << new_R_zero << endl;
 
             // now calculate what R_zero will be at the start of the next season
             vector<double> average_tk;
@@ -127,7 +157,15 @@ int main(int argc, char* argv[]) {
         sim->reset();
         new_R_zero = R_zero;
     }
-    cout << delta(sim_data, obs_data) << endl;
+    // Report parameters
+    cout << "R0 " << R_zero;
+    cout << " Ih " << Ih;
+    cout << " h " << h;
+    cout << " P0 " << patient_zero_ct;
+    report_metrics(sim_data, R0_vals);
+    //vector<float> r0_flat = flatten_map(R0_vals); 
+    //cerr_vector(r0_flat ); cerr << endl;
+    return 0;
 }
 
 void generate_network(Network* net, MultiSeason_Sim* sim) {
@@ -157,9 +195,7 @@ void read_observed_data(string filename, char sep, map<string, vector<float> > &
                 string loc   = strip(fields[0],whitespace);
                 string year  = strip(fields[1],whitespace);
                 float  count = to_float(strip(fields[2],whitespace));
-                //if (obs_data.count(loc) == 0) {
                 obs_data[loc].push_back(count); 
-                //}
             }
         }
     }
@@ -172,12 +208,9 @@ double KS(vector<float>s1, vector<float>s2) {
 
     sort(s1.begin(), s1.end());
     sort(s2.begin(), s2.end());
-    //cerr << "min, mean, max, sd (s1): " << s1[0] << "\t" << mean(s1) << "\t" << s1.back() << "\t" << stdev(s1) << endl;
-    //cerr << "min, mean, max, sd (s2): " << s2[0] << "\t" << mean(s2) << "\t" << s2.back() << "\t" << stdev(s2) << endl;
 
     s1.push_back(numeric_limits<float>::infinity());
     s2.push_back(numeric_limits<float>::infinity());
-
 
     int i=0; int j=0;
     while( i < s1size-1 || j < s2size-1) {
@@ -228,91 +261,31 @@ vector<double> autocorrelation_matrix(map<string, vector<float> > &data) {
     return ac_matrix;
 }
 
-/*
-double autocorrelation_score(vector<float>sim, vector<float>obs) {
-    double mean_sim = mean(sim);
-    double mean_obs = mean(obs);
-
-    // Autocorrelation scores
-    // indexing: 0 == small, small; 1 == large, large; 2 == small, large; 3 == large, small
-    vector<double> sim_acm = autocorrelation_matrix( sim );
-    vector<double> obs_acm = autocorrelation_matrix( obs );
-    
-    double ac_score_sq = 0;
-
-    for (int i = 0; i < 4; i++) {
-        ac_score_sq += pow(sim_acm[i] - obs_acm[i], 2);
-    }
-
-    return ac_score_sq / 2.0; // min score is 0, max is 2; this normalizes it
-}*/
-
-vector<float> flatten_map(map<string, vector<float> > data) {
-    vector<float> flat;
-    map<string, vector<float> >::iterator it;
-
-    for ( it = data.begin(); it != data.end(); it++ ) {
-        string loc = it->first;
-        for (unsigned int i = 0; i < data[loc].size(); i++) {
-            flat.push_back(data[loc][i]);
-        }
-    }
-    return flat;
-}
-
-double delta(map<string, vector<float> > sim, map<string, vector<float> > obs) {
+vector<double> report_metrics(map<string, vector<float> > sim, map<string, vector<float> > Re_values) {
     vector<float> sim_flat = flatten_map( sim );
-    vector<float> obs_flat = flatten_map( obs );
+    vector<float> Re_flat  = flatten_map( Re_values );
 
     double mean_sim = mean(sim_flat);
-    double mean_obs = mean(obs_flat);
     double median_sim = median(sim_flat);
-    double median_obs = median(obs_flat);
     double skew_sim = mean_sim - median_sim;
-    double skew_obs = mean_obs - median_obs;
     double sd_sim = stdev(sim_flat);
-    double sd_obs = stdev(obs_flat);
-
     vector<double> acm_sim = autocorrelation_matrix(sim);
-    vector<double> acm_obs = autocorrelation_matrix(obs);
 
-    double mean_sq_dist = pow(mean_sim - mean_obs, 2);
-    double skew_sq_dist = pow(mean_sim-median_sim - mean_obs-median_obs, 2);
-    double sd_sq_dist = pow(sd_sim - sd_obs, 2);
-    
-    // Autocorrelation
-    double ss_sq_dist = pow(acm_sim[0] - acm_obs[0], 2);
-    double ll_sq_dist = pow(acm_sim[1] - acm_obs[1], 2);
-    double sl_sq_dist = pow(acm_sim[2] - acm_obs[2], 2);
-    double ls_sq_dist = pow(acm_sim[3] - acm_obs[3], 2);
-    //double auto_corr_sq_dist = autocorrelation_score( sim, obs );
-    //double R0_dist = pow((R_zero - obs_R0)/obs_R0, 2);
-    //double R_dist = pow((sim_R - obs_R)/obs_R, 2);
-    
-    double delta_sq = 0;
-    delta_sq += mean_sq_dist;
-    delta_sq += skew_sq_dist;
-    delta_sq += sd_sq_dist;
-    delta_sq += ss_sq_dist;
-    delta_sq += ll_sq_dist;
-    delta_sq += sl_sq_dist;
-    delta_sq += ls_sq_dist;
+    float epi_threshold = 0.05;
+    double mean_Re = calculate_mean_effective_R (sim_flat, Re_flat, epi_threshold);
 
-    double delta = sqrt(delta_sq);
-
-    //cerr << "min, mean, max, sd (sim): " << sim[0] << "\t" << mean(sim) << "\t" << sim.back() << "\t" << stdev(sim) << endl;
-    //cerr << "min, mean, max, sd (obs): " << obs[0] << "\t" << mean(obs) << "\t" << obs.back() << "\t" << stdev(obs) << endl;
-
-
-    cerr << "R0, Ih, h, P0 : mean, median, sd, skew, ss, ll, sl, ls : delta ";
+    cout << " mean " << mean_sim;
+    cout << " median " << median_sim;
+    cout << " sd " << sd_sim;
+    cout << " skew " << skew_sim;
+    cout << " ss " << acm_sim[0];
+    cout << " ll " << acm_sim[1];
+    cout << " sl " << acm_sim[2];
+    cout << " ls " << acm_sim[3];
+    cout << " Re " << mean_Re;
+/*
+    //cerr << "R0, Ih, h, P0 : mean, median, sd, skew, ss, ll, sl, ls : delta ";
     cerr << R_zero << "," << Ih << "," << h << "," << patient_zero_ct << ",  ";
-/*    cerr << sqrt(mean_sq_dist) << ",";
-    cerr << sqrt(sd_sq_dist) << ",";
-    cerr << sqrt(skew_sq_dist) << ",";
-    cerr << sqrt(ss_sq_dist) << ",";
-    cerr << sqrt(ll_sq_dist) << ",";
-    cerr << sqrt(sl_sq_dist) << ",";
-    cerr << sqrt(ls_sq_dist) << ",";*/
     cerr << mean_sim << ",";
     cerr << median_sim << ",";
     cerr << sd_sim << ",";
@@ -320,12 +293,24 @@ double delta(map<string, vector<float> > sim, map<string, vector<float> > obs) {
     cerr << acm_sim[0] << ",";
     cerr << acm_sim[1] << ",";
     cerr << acm_sim[2] << ",";
-    cerr << acm_sim[3] << ",";
-    cerr << delta << endl;
+    cerr << acm_sim[3];
+    cerr << endl;*/
 
-    //cerr << mean_dist << "\t" << stdev_dist << "\t" << R0_dist << "\t" << R_dist << endl;
-    return delta;
-    //return sqrt(mean_dist + stdev_dist + skew_dist + R0_dist + R_dist);
+    vector<double> variables(12);
+/*    variables[0] = R_zero;
+    variables[1] = Ih;
+    variables[2] = h;
+    variables[3] = patient_zero_ct;
+    variables[4] = mean_sim;
+    variables[5] = median_sim;
+    variables[6] = sd_sim;
+    variables[7] = skew_sim;
+    variables[8] = acm_sim[0];
+    variables[9] = acm_sim[1];
+    variables[10] = acm_sim[2];
+    variables[11] = acm_sim[3];
+*/ 
+    return variables;
 }
 
 

@@ -12,8 +12,8 @@ def warn(msg):
 # SMC ABC Parameters
 T = 1                                              # Number of sets to generate 
 N = 12500                                            # Number of good samples (delta < epsilon) per set
-epsilon = [10 for i in range(T)]    # 0.5 through 0.05
-delta_initial = 11  # normally set to 1.  Setting epsilon and delta_initial high will result in accepting all runs
+#epsilon = [10 for i in range(T)]    # 0.5 through 0.05
+#delta_initial = 11  # normally set to 1.  Setting epsilon and delta_initial high will result in accepting all runs
 #epsilon = [0.5 - 0.45*i/(T-1) for i in range(T)]    # 0.5 through 0.05
 theta = list()                                      # Sets of parameter values that worked
 omega = list()                                      # Weights associated with each parameter set
@@ -115,16 +115,16 @@ omega.append( list() )
 
 warn(' '.join(['#'] + prefix))
 for i in range(N):
-    delta = delta_initial
     R0, Ih, P0, h = 0,0,0,0
-    while delta >= epsilon[0]:
-        R0, Ih, P0, h = sample_priors()
-        exec_str = ' '.join(prefix + [str(R0), str(Ih), str(P0), str(h), "france.tab"])
-        delta = Popen(prefix + [str(R0), str(Ih), str(P0), str(h), "france.tab"], stdout=PIPE).communicate()[0]
-        delta = float(delta.strip())
-        #print "delta, t, i:", delta, 0, i
+    R0, Ih, P0, h = sample_priors()
+    metrics_str  = Popen(prefix + [str(R0), str(Ih), str(P0), str(h), "france.tab"], stdout=PIPE).communicate()[0]
+    metrics_iter = iter(metrics_str.split())
+    metrics = dict(zip(metrics_iter, metrics_iter))
+    print metrics
+    from sys import exit
+    exit(1)
     
-    print "t, i : R0, Ih, P0, h : delta: ", '0', i, ':', R0, Ih, P0, h, ':', delta
+    print "t, i:", '0', i
     theta[0]['R0'].append( R0 )
     theta[0]['Ih'].append( Ih )
     theta[0]['P0'].append( P0 )
@@ -144,23 +144,17 @@ for t in range(1,T):
     omega.append( list() )
 
     for i in range(N):
-        delta = () 
-        while delta >= epsilon[t]:
-            idx = rand_nonuniform_int(omega[t-1])
-            R0_mean = theta[t-1]['R0'][idx]
-            Ih_mean = theta[t-1]['Ih'][idx]
-            P0_mean = theta[t-1]['P0'][idx]
-            h_mean = theta[t-1]['h'][idx]
+        idx = rand_nonuniform_int(omega[t-1])
+        R0_mean = theta[t-1]['R0'][idx]
+        Ih_mean = theta[t-1]['Ih'][idx]
+        P0_mean = theta[t-1]['P0'][idx]
+        h_mean = theta[t-1]['h'][idx]
 
-            R0 = trunc_gauss(R0_mean, sqrt(tau_sq[t-1]["R0"]), R0_min, R0_max)
-            Ih = trunc_gauss(Ih_mean, sqrt(tau_sq[t-1]["Ih"]), Ih_min, Ih_max)
-            P0 = round( 2**trunc_gauss(log(P0_mean, 2), log(sqrt(tau_sq[t-1]["P0"]), 2), P0_min, P0_max) )
-            #P0 = round(trunc_gauss(P0_mean, sqrt(tau_sq[t-1]["P0"]), 2**P0_min, 2**P0_max))
-            h = trunc_gauss(h_mean, sqrt(tau_sq[t-1]["h"]), h_min, h_max)
-
-            exec_str = ' '.join(prefix + [str(R0), str(Ih), str(P0), str(h), "france.tab"])
-            delta = Popen(prefix + [str(R0), str(Ih), str(P0), str(h), "france.tab"], stdout=PIPE).communicate()[0]
-            delta = float(delta.strip())
+        R0 = trunc_gauss(R0_mean, sqrt(tau_sq[t-1]["R0"]), R0_min, R0_max)
+        Ih = trunc_gauss(Ih_mean, sqrt(tau_sq[t-1]["Ih"]), Ih_min, Ih_max)
+        P0 = round( 2**trunc_gauss(log(P0_mean, 2), log(sqrt(tau_sq[t-1]["P0"]), 2), P0_min, P0_max) )
+        #P0 = round(trunc_gauss(P0_mean, sqrt(tau_sq[t-1]["P0"]), 2**P0_min, 2**P0_max))
+        h = trunc_gauss(h_mean, sqrt(tau_sq[t-1]["h"]), h_min, h_max)
 
         theta[t]['R0'].append( R0 )
         theta[t]['Ih'].append( Ih )
