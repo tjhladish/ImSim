@@ -12,7 +12,7 @@ def warn(msg):
 # After Beaumont 2010, p. 388
 
 # SMC ABC Parameters
-N = 12500                                            # Number of samples
+N = 1000                                            # Number of samples
 theta = list()                                      # Sets of parameter values that worked
 omega = list()                                      # Weights associated with each parameter set
 tau_sq = list()
@@ -31,8 +31,8 @@ P0_min = 0 # Exponential, e.g. 2**P0_min
 P0_max = 8 # 2**P0_max
 h_min  = 0
 h_max  = 1
-h_mu   = 0.45
-h_sigma= 0.2
+#h_mu   = 0.45
+#h_sigma= 0.2
 
 def valid_pars(R0, Ih, P0, h):
     if R0 < R0_min or R0 > R0_max:
@@ -92,7 +92,8 @@ def weight(theta, omega, tau_sq):
     numerator = uniform_pdf(R0_min, R0_max) \
                 * uniform_pdf(Ih_min, Ih_max) \
                 * uniform_pdf(P0_min, P0_max) \
-                * gauss_pdf(h_mu, h_sigma, theta[-1]['h'][-1])
+                * uniform_pdf(h_min, h_max)
+                #* gauss_pdf(h_mu, h_sigma, theta[-1]['h'][-1])
 
     denominator = 0
     for j in range(len(omega[-2])):
@@ -112,7 +113,7 @@ def weight(theta, omega, tau_sq):
 # Read in last set of particles
 theta.append( {'R0':[], 'Ih':[], 'P0':[], 'h':[] } )
 
-for line in file("predictive_prior.1"):
+for line in file("predictive_prior.0"):
     R0, Ih, h, P0 = [float(i) for i in line.split()]
     theta[0]['R0'].append( R0 )
     theta[0]['Ih'].append( Ih )
@@ -120,7 +121,7 @@ for line in file("predictive_prior.1"):
     theta[0]['h'].append( h )
  
 omega.append( list() )
-for w in file("predictive_prior_weights.1"):
+for w in file("predictive_prior_weights.0"):
     omega[0].append( float(w.strip()) ) 
 
 last_num = last_set_number()
@@ -160,7 +161,7 @@ for i in range(N):
     P0 = round( 2**trunc_gauss(log(P0_mean, 2), log(sqrt(tau_sq[0]["P0"]), 2), P0_min, P0_max) )
     h  = trunc_gauss(h_mean, sqrt(tau_sq[0]["h"]), h_min, h_max)
 
-    metrics_str  = Popen(prefix + [str(R0), str(Ih), str(P0), str(h), "france.tab"], stdout=PIPE).communicate()[0]
+    metrics_str  = Popen(prefix + [str(R0), str(Ih), str(P0), str(h), "texas.csv"], stdout=PIPE).communicate()[0]
     metrics_iter = iter(metrics_str.split())
     metrics = dict(zip(metrics_iter, metrics_iter))
     

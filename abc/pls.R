@@ -6,11 +6,12 @@ weights = read.table("weights.1", sep=',', header=F)
 params = raw_data[,1:4]
 metrics = raw_data[,5:12] + 1
 
-vobs = c(0.0483716190476, 0.044, 0.0255449427004, 0.00437161904762, 0.371031746032, 0.232142857143, 0.19246031746, 0.204365079365)
+#vobs = c(0.0483716190476, 0.044, 0.0255449427004, 0.00437161904762, 0.371031746032, 0.232142857143, 0.19246031746, 0.204365079365) # france
+vobs = c(0.00027237391143, 0.000185781865766, 0.000313349079759, 8.6592045664e-05, 0.236111111111, 0.165798611111, 0.325520833333, 0.272569444444) # texas
 vobs = vobs + 1
 
 lam <- numeric(8)
-pdf("/home/tjhladish/Dropbox/Eugene/pls_plots/pls_plots.pdf", width=11, height=8.5)
+pdf("/home/tjhladish/Dropbox/Eugene/pls_plots/TX_pls_plots1.pdf", width=11, height=8.5)
 par(mfrow=c(4,2));for (i in 1:length(lam)) hist(metrics[,i])
 
 library(MASS) ###computes the lambda parameters for the box-cox transformation
@@ -61,9 +62,9 @@ for (i in 1:COMP){
 d <- d+ (sim.metr[,i]-obs.metr[i])^2
 }
 
-predictive.prior <- params[order(d)[1:1000],]#simple rejection. Try small numbers
-met.reject  <- sim.metr[order(d)[1:1000],]
-weights.filtered <- weights[order(d)[1:1000],]
+predictive.prior <- params[order(d)[1:600],]#simple rejection. Try small numbers
+met.reject  <- sim.metr[order(d)[1:600],]
+weights.filtered <- weights[order(d)[1:600],]
 
 dev.off()
 ##here you are.
