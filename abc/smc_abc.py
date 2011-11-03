@@ -1,6 +1,6 @@
 #!/usr/bin/python
-from sys import stderr, argv
-from random import random, gauss, uniform
+from sys import stderr, argv, exit
+from random import random, gauss, uniform, randint
 from math import pi, exp, sqrt, log
 from subprocess import Popen, PIPE
 
@@ -9,25 +9,30 @@ def warn(msg):
 
 # After Beaumont 2010, p. 388
 
-# SMC ABC Parameters
-T = 1                                               # Number of sets to generate 
-N = 1000                                          # Number of good samples (delta < epsilon) per set
-theta = list()                                      # Sets of parameter values that worked
-omega = list()                                      # Weights associated with each parameter set
-tau_sq = list()
-
-prefix = ['./epi_sim_abc', '20', '10000']  # 
-pars = ['R0', 'Ih', 'P0', 'h']
-
 # Valid parameter ranges
 R0_min = 1
-R0_max = 5
+R0_max = 8
 Ih_min = 1.0/12.0 
 Ih_max = 100
-P0_min = 0 # Exponential, e.g. 2**P0_min
-P0_max = 8 # 2**P0_max
+P0_min = 1
+P0_max = 256
 h_min  = 0
 h_max  = 1
+
+
+def read_config():
+    config = dict()
+    for line in file('abc.config'):
+        k, v = line.strip().split('\t')
+        try:
+            v = int(v)
+        except ValueError:
+            try:
+                v = float(v)
+            except ValueError:
+                pass
+        config[k] = v
+    return config
 
 def valid_pars(R0, Ih, P0, h):
     if R0 < R0_min or R0 > R0_max:
@@ -38,18 +43,18 @@ def valid_pars(R0, Ih, P0, h):
         return false 
     if h < h_min   or h > h_max:
         return false
-
     return true
     
 
 def sample_priors():
     # R0, Ih, P0, h
     R0 = uniform(R0_min, R0_max)
-    Ih  = uniform(Ih_min, Ih_max) # infinite immunity <-> losing 99% of immunity every year
-    P0 = round(2**uniform(P0_min,P0_max)) # [1,256] loguniform
-    #h  = trunc_gauss(h_mu, h_sigma, h_min, h_max)
+    Ih = uniform(Ih_min, Ih_max) # infinite immunity <-> losing 99% of immunity every year
     h  = uniform(h_min, h_max)
-    return R0, Ih, P0, h
+    P0 = randint(P0_min, P0_max)
+    #P0 = round(2**uniform(P0_min,P0_max)) # [1,256] loguniform
+    #h  = trunc_gauss(h_mu, h_sigma, h_min, h_max)
+    return [R0, Ih, h, P0]
 
 
 def trunc_gauss(mu, sigma, a, b):
@@ -98,42 +103,17 @@ def weight(theta, omega, tau_sq):
     
     return numerator / denominator
 
+conf = read_config()
+prefix = ['./epi_sim_abc', str(conf['burnin']), str(conf['network_size'])]
+particle_keys = ['R0', 'Ih', 'h', 'P0', 'mean', 'median', 'max', 'range', 'sd', 'skew', 'ss', 'll', 'sl', 'ls', 'Re']
 
-# Example epi sim command:
-# ./epi_sim_abc 100 10000 1.8 .3 25 .43 france.tab
-
-# Step 1
-
-output_tag = argv[1]
-fo_weights = open('weights.' + output_tag, 'w')
-fo_particles = open('particles.' + output_tag, 'w')
-line = ','.join(['R0', 'Ih', 'h', 'P0', 'mean', 'median', 'sd', 'skew', 'ss', 'll', 'sl', 'ls', 'Re'])
-fo_particles.write( line + '\n' )
-
-theta.append( dict() )
-for par in ['R0', 'Ih', 'P0', 'h']:
-    theta[0][par] = []
-omega.append( list() )
+fo_parameters = open('parameters.0', 'w')
 
 warn(' '.join(['#'] + prefix))
-for i in range(N):
-    warn(output_tag + ' ' + str(i))
-    R0, Ih, P0, h = 0,0,0,0
-    R0, Ih, P0, h = sample_priors()
-    metrics_str  = Popen(prefix + [str(R0), str(Ih), str(P0), str(h), "texas.csv"], stdout=PIPE).communicate()[0]
-    metrics_iter = iter(metrics_str.split())
-    metrics = dict(zip(metrics_iter, metrics_iter))
-    line = ','.join([ metrics[k] for k in ['R0', 'Ih', 'h', 'P0', 'mean', 'median', 'sd', 'skew', 'ss', 'll', 'sl', 'ls', 'Re'] ])
-    fo_particles.write( line + '\n' )
-    particle_weight = 1.0/N
-    fo_weights.write( str(particle_weight) + '\n' )
+for i in range(conf['sample_size']):
+    #warn(output_tag + ' ' + str(i))
+    par_str = [str(i) for i in sample_priors()]
+    line = ','.join(par_str)
+    fo_parameters.write( line + '\n' )
 
-    #print "t, i:", '0', i
-    #theta[0]['R0'].append( R0 )
-    #theta[0]['Ih'].append( Ih )
-    #theta[0]['P0'].append( P0 )
-    #theta[0]['h'].append( h )
-    
-    #omega[0].append( 1.0/N )
-fo_weights.close()
-fo_particles.close()
+fo_parameters.close()
