@@ -1,6 +1,46 @@
-#include "/home/tjhladish/work/ImSim/MultiSeason_Network/MultiSeason_Sim.h"
+#include "../MultiSeason_Network/MultiSeason_Sim.h"
 #include <time.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <map>
+
+
+struct Parameters {
+    string observed_data_file;
+    int network_size, burnin, sample_size, threads;
+    double epsilon, obs_mean, obs_median, obs_max, obs_range, obs_sd, obs_skew, obs_ss, obs_ll, obs_sl, obs_ls;
+};
+
+struct Particle { 
+    double R0, Ih, h; 
+    int P0;
+};
+
+struct Tau_sq {
+    double R0, Ih, P0, h;
+};
+
+struct ParticleSet { 
+    vector<Particle> particles;
+    Particle back() { return particles.back(); }
+    void resize(const int n) { particles.resize(n); }
+    int size() { return (int) particles.size(); }
+    Particle& operator[] ( const int nIndex) { return particles[nIndex]; }
+};
+
+Parameters asdffdsa;
+vector<ParticleSet> theta; 
+
+// Define ABC parameters
+const double R0_min = 1.0;
+const double R0_max = 8.0;
+const double Ih_min = 1.0/12.0;
+const double Ih_max = 100.0;
+const int P0_min = 1;
+const int P0_max = 256;
+const double h_min  = 0.0;
+const double h_max  = 1.0;
+
 
 int NET_SIZE;     // size of network to use
 int patient_zero_ct; // number of infections to introduce (usually 1)
@@ -9,9 +49,6 @@ double R_zero; //r0 value for epidemic
 enum DistType { POI, EXP, POW, URB, CON}; // specifies which degree distribution to use: poisson, exponential, powerlaw, urban, or constant
 DistType dist = URB;
 
-// Distribution parameters.  param2 is a dummy for poisson and exponential.
-double param1;
-double param2;
 double Ih; // Immunity halflife
 int burnin;
 double h; // hospitalization/doctor visit rate
@@ -21,7 +58,7 @@ void generate_network(Network* net, MultiSeason_Sim* sim);
 void connect_network (Network* net);
 void read_observed_data(string filename, char sep, map<string, vector<float> > &data);
 double KS(vector<float>s1, vector<float>s2);
-vector<double> report_metrics(map<string, vector<float> > s1, map<string, vector<float> > s2);
+void report_metrics(map<string, vector<float> > s1, map<string, vector<float> > s2);
 //double autocorrelation_score( vector<float>s1, vector<float>s2 );
 vector<double> autocorrelation_matrix( map<string, vector<float> >& data );
 
@@ -30,6 +67,7 @@ vector<double> autocorrelation_matrix( map<string, vector<float> >& data );
 
 float controlB[] = {1.26, 0.34, 0.70, 1.75, 50.57, 1.55, 0.08, 0.42, 0.50, 3.20, 0.15, 0.49, 0.95, 0.24, 1.37, 0.17, 6.98, 0.10, 0.94, 0.38 };
 float treatmentB[] = {2.37, 2.16, 14.82, 1.73, 41.04, 0.23, 1.32, 2.91, 39.41, 0.11, 27.44, 4.51, 0.51, 4.50, 0.18, 14.68, 4.66, 1.30, 2.06, 1.19};
+double uniform_pdf(double a, double b) { return 1.0 / fabs(b-a); }
 
 vector<float> flatten_map(map<string, vector<float> > data) {
     vector<float> flat;
@@ -45,23 +83,11 @@ vector<float> flatten_map(map<string, vector<float> > data) {
 }
 
 void connect_network (Network* net) {
-    if (dist == POI) {
-        net->rand_connect_poisson(param1);
-    } else if (dist == EXP) {
-        net->rand_connect_exponential(param1);
-    } else if (dist == POW) {
-        net->rand_connect_powerlaw(param1, param2);
-    } else if (dist == URB) {
-        vector<double> dist;
-        double deg_array[] = {0, 0, 1, 12, 45, 50, 73, 106, 93, 74, 68, 78, 91, 102, 127, 137, 170, 165, 181, 181, 150, 166, 154, 101, 67, 69, 58, 44, 26, 24, 17, 6, 11, 4, 0, 6, 5, 3, 1, 1, 3, 1, 1, 0, 1, 0, 2};
-        dist.assign(deg_array,deg_array+47);
-        dist = normalize_dist(dist, sum(dist));
-        net->rand_connect_user(dist);
-    } else if (dist == CON) {
-        vector<double> dist(param1+1, 0);
-        dist[param1] = 1;
-        net->rand_connect_user(dist);
-    }
+    vector<double> dist;
+    double deg_array[] = {0, 0, 1, 12, 45, 50, 73, 106, 93, 74, 68, 78, 91, 102, 127, 137, 170, 165, 181, 181, 150, 166, 154, 101, 67, 69, 58, 44, 26, 24, 17, 6, 11, 4, 0, 6, 5, 3, 1, 1, 3, 1, 1, 0, 1, 0, 2};
+    dist.assign(deg_array,deg_array+47);
+    dist = normalize_dist(dist, sum(dist));
+    net->rand_connect_user(dist);
 }
 
 double calculate_mean_effective_R (vector<float> epi_values, vector<float> Re_values, float threshold) {
@@ -81,47 +107,234 @@ double calculate_mean_effective_R (vector<float> epi_values, vector<float> Re_va
     }
 }
 
-void processCmdlineParameter(int argc, char* argv[] ) {
-    //cerr << "Arguments provided: " << argc - 1 << endl;
-    //cerr << "Argument order: burnin_seasons net_size R0 Ih p0_ct hosp_rate real_data_filename\n";
-    if ( argc == 8 ) {  
+void process_config_file (string config_filename, Parameters &p) {
 
-        burnin     = (int) atoi(argv[1]); 
-        NET_SIZE   = (int) atoi(argv[2]); 
-        R_zero     = (double) atof(argv[3]);
-        dist       = (DistType) URB;
-        Ih         = (double) atof(argv[4]);
-        patient_zero_ct =  (int) atoi(argv[5]);
-        h          = (double) atof(argv[6]);
+    std::map<string,string> tmp_par;
+    ifstream myfile(config_filename.c_str());
+    std::stringstream ss;
 
-        observed_data_filename = argv[7];
- 
-        //cerr << "# "; for(int i=0; i < argc; i++ )  cerr << argv[i] <<  " ";  cerr << endl;
-        //need to check bounds
-        if (Ih < 0)        { cerr << "Expecting non-negative immunity halflife parameter\n"; exit(-1); }
-        if (h <= 0 || h > 1)        { cerr << "Expecting h to be between 0 and 1 \n"; exit(-1); }
+    if (myfile.is_open()) {
+        string line;
+        char sep = '\t';
 
+        while ( getline(myfile, line) ) {
+            vector<string> fields;
+            split(line, sep, fields);
+
+            const char whitespace[] = " \n\t\r";
+            string key =   strip( fields[0], whitespace ); 
+            string value = strip( fields[1], whitespace ); 
+
+            tmp_par[ key ] = value;
+        }
     } else {
-        cerr << "Expecting 7 parameters.\n";
-        cerr << "Argument order: burnin_seasons net_size R0 Ih p0_ct hosp_rate real_data_filename\n";
-        exit(-1);
+        cerr << "Failed to open parameter file\n";
+        exit(102);
+    }
+
+    p.observed_data_file = tmp_par["observed_data_file"];
+    p.network_size = to_int( tmp_par["network_size"] );
+    p.burnin       = to_int( tmp_par["burnin"] );
+    p.sample_size  = to_int( tmp_par["sample_size"] );  
+    p.epsilon      = to_double( tmp_par["epsilon"] );
+    p.threads      = to_int( tmp_par["threads"] );
+    p.obs_mean     = to_double( tmp_par["obs_mean"] );
+    p.obs_median   = to_double( tmp_par["obs_median"] );
+    p.obs_max      = to_double( tmp_par["obs_max"] );
+    p.obs_range    = to_double( tmp_par["obs_range"] );
+    p.obs_sd       = to_double( tmp_par["obs_sd"] );
+    p.obs_skew     = to_double( tmp_par["obs_skew"] );
+    p.obs_ss       = to_double( tmp_par["obs_ss"] );
+    p.obs_ll       = to_double( tmp_par["obs_ll"] );
+    p.obs_sl       = to_double( tmp_par["obs_sl"] );
+    p.obs_ls       = to_double( tmp_par["obs_ls"] );
+
+    return;
+}
+
+
+bool fileExists(string strFilename) { 
+    struct stat stFileInfo; 
+    bool blnReturn; 
+    int intStat; 
+    // Attempt to get the file attributes 
+    intStat = stat(strFilename.c_str(),&stFileInfo); 
+    if(intStat == 0) { 
+        blnReturn = true; 
+    } else { 
+        blnReturn = false;
+    }
+    return(blnReturn);
+}
+
+int determine_set_number() {
+    bool found_file = true;
+    int set_num = 0;
+    while (found_file) {
+        stringstream ss;
+        ss << "predictive_prior." << set_num;
+        if ( fileExists(ss.str()) ) {
+            set_num++;
+        } else {
+            found_file = false;
+        }
+    }
+    return set_num;
+}
+
+
+void sample_prior(ParticleSet &particles, int sample_size, MTRand* mtrand) {
+    particles.resize(sample_size);
+    for (int i = 0; i < sample_size; i++) {
+        particles[i].R0 = rand_uniform( R0_min, R0_max, mtrand );
+        particles[i].Ih = rand_uniform( Ih_min, Ih_max, mtrand );
+        particles[i].h  = rand_uniform( h_min,  h_max,  mtrand  );
+        particles[i].P0 = rand_uniform_int( P0_min, P0_max, mtrand );
     }
 }
 
 
+void sample_predictive_prior(int set_num, ParticleSet &particles, int sample_size, MTRand* mtrand) {
+    // Read in predictive prior from the last set.
+    // We need to calculate the proper weights for the predictive prior so that we know how to sample from it.
+    ParticleSet predictive_prior = read_predictive_prior_file( "predictive_prior." + to_string(set_num - 1) );
+    
+    vector<double> old_weights;
+    if (set_num == 1) {
+        // uniform weights for set 0 predictive prior
+        old_weights.resize(predictive_prior.size(), 1.0/(double) predictive_prior.size());
+    } else if ( set_num > 1 ) {
+        // weights from set - 2 are needed to calculate weights for set - 1
+        old_weights = read_weights_file("weights." + to_string(set_num - 2) );
+    }
+
+    particles.resize(sample_size);
+    for (int i = 0; i < sample_size; i++) {
+       // particles[i].R0 = rand_uniform( R0_min, R0_max, mtrand );
+       // particles[i].Ih = rand_uniform( Ih_min, Ih_max, mtrand );
+       // particles[i].h  = rand_uniform( h_min,  h_max,  mtrand  );
+       // particles[i].P0 = rand_uniform_int( P0_min, P0_max, mtrand );
+    }
+}
+
+void read_predictive_prior_file(string filename) {
+// 'R0', 'Ih', 'h', 'P0', 'mean', 'median', 'max', 'range', 'sd', 'skew', 'ss', 'll', 'sl', 'ls', 'Re'   
+
+}
+
+vector<double> read_weights_file(string filename) {
+    vector<double> weights;
+    ifstream myfile(filename.c_str());
+    std::stringstream ss;
+
+    if (myfile.is_open()) {
+        string line;
+
+        while ( getline(myfile,line) ) {
+            //split string based on "," and store results into vector
+            const char whitespace[] = " \n\t\r";
+            string val_str = strip( line, whitespace );
+        
+            weights.push_back( atof( val_str.c_str() ) );
+        }
+    }
+    return weights;
+}
+
+vector<double> determine_weights(int particles_in_prior) {
+    const double N = (double) particles_in_prior;
+    vector<double> weights;
+    int set_num = determine_set_number();
+    switch (set_num) {
+        case 0:
+            break;
+        case 1:
+            weights.clear();
+            weights.resize((int) N, 1.0/N);
+            break;
+        default:
+            cerr << "determine weights is not fully implemented\n";
+            break;
+    }
+        
+    return weights;
+}
+
+
+// theta = each step in ABC produces one ParticleSet, which in turn is a vector of parameter combinations
+// omega = first index determines which ABC step, second index determines which particle the weight corresponds to
+// tau_sq = the variances of each of the parameters, for the last completed ABC set
+vector<double> predictive_prior_weights(ParticleSet predictive_prior, vector <double> old_weights, Tau_sq tau_sq) {
+
+    double numerator = uniform_pdf(R0_min, R0_max)
+                       * uniform_pdf(Ih_min, Ih_max)
+                       * uniform_pdf(P0_min, P0_max)
+                       * uniform_pdf(h_min, h_max);
+
+    double denominator = 0.0;
+    //double normal_pdf(double x, double mu, double var) {
+    ParticleSet last_pset = theta[ theta.size() - 2 ];
+    Particle last_particle = theta.back().back();
+
+    cerr << "make sure that omega[0] is accessing the right weights list\n";
+    for (unsigned int j = 0; j < omega[ omega.size() - 2 ].size(); j++) {
+        denominator += omega[0][j] \
+                       * normal_pdf(last_particle.R0, last_pset[j].R0, tau_sq.R0)
+                       * normal_pdf(last_particle.Ih, last_pset[j].Ih, tau_sq.Ih)
+                       * normal_pdf(last_particle.P0, last_pset[j].P0, tau_sq.P0)
+                       * normal_pdf(last_particle.h,  last_pset[j].h, tau_sq.h);
+    }
+
+    return numerator / denominator;
+}
+
+
+/*
+Determine run number: what is the last predictive_prior.X file? (or does one not exist->first run)
+
+If first time being run, no input files exist.  Sample from uniform priors, output particles.
+
+If second time, read in predictive prior from first run, use uniform weights. Output uniform
+weights as weights for first run, output second run particles.
+
+If third+ time, read in predictive prior from last run, weights from second to last run,
+calculate and output weights for last run; output particles.
+
+*/
+
+
 int main(int argc, char* argv[]) {
-    processCmdlineParameter(argc,argv);
+    if (argc < 2) { cerr << "Provide configuration file name as a parameter\n"; }
+    string config_file_name( argv[1] );
+
+    // Process configuration file
+    Parameters par;
+    process_config_file(config_file_name, par);
+
+    // Determine which ABC set we're supposed to run
+    const int set_num = determine_set_number();
+
+    // Determine what parameter combinations we will try
+    static MTRand mtrand;
+    ParticleSet particles;
+    if (set_num == 0) {
+        // sample naive priors
+        sample_prior(particles, par.sample_size, mtrand);
+    } else {
+        // sample predictive priors based on last set
+        sample_predictive_prior(set_num, particles, par.sample_size, mtrand);
+    }
+
+exit(0);
 
     map<string, vector<float> > sim_data;
     map<string, vector<float> > R0_vals;
     map<string, vector<float> > obs_data; //string = location, float = incidence on [0,1]
-    read_observed_data(observed_data_filename, ',', obs_data);
 
-    // Header line
-    //cerr << "# Network Season Epi_size P0_size R0\n";
+    read_observed_data(par.observed_data_file, ',', obs_data);
 
     Network* net = new Network("EpiNet", Network::Undirected);
-    MultiSeason_Sim* sim = new MultiSeason_Sim(net,Ih);
+    MultiSeason_Sim* sim = new MultiSeason_Sim(net, Ih);
     generate_network(net, sim);
     double new_R_zero = R_zero;
 
@@ -184,12 +397,15 @@ void read_observed_data(string filename, char sep, map<string, vector<float> > &
         while ( getline(myfile,line) ) {
             //split string based on "," and store results into vector
             vector<string> fields;
-            split(line,sep, fields);
+            split(line, sep, fields);
             const char whitespace[] = " \n\t\r";
 
             //format check
             if (fields.size() > 3 ) {
                 cerr << "Skipping line: too many fields: " << line << endl;
+                continue;
+            } else if (fields.size() < 3 ) {
+                cerr << "Skipping line: too few fields: " << line << endl;
                 continue;
             } else { 
                 string loc   = strip(fields[0],whitespace);
@@ -199,6 +415,7 @@ void read_observed_data(string filename, char sep, map<string, vector<float> > &
             }
         }
     }
+    return;
 }
 
 double KS(vector<float>s1, vector<float>s2) {
@@ -261,7 +478,7 @@ vector<double> autocorrelation_matrix(map<string, vector<float> > &data) {
     return ac_matrix;
 }
 
-vector<double> report_metrics(map<string, vector<float> > sim, map<string, vector<float> > Re_values) {
+void report_metrics(map<string, vector<float> > sim, map<string, vector<float> > Re_values) {
     vector<float> sim_flat = flatten_map( sim );
     vector<float> Re_flat  = flatten_map( Re_values );
 
@@ -283,34 +500,8 @@ vector<double> report_metrics(map<string, vector<float> > sim, map<string, vecto
     cout << " sl " << acm_sim[2];
     cout << " ls " << acm_sim[3];
     cout << " Re " << mean_Re;
-/*
-    //cerr << "R0, Ih, h, P0 : mean, median, sd, skew, ss, ll, sl, ls : delta ";
-    cerr << R_zero << "," << Ih << "," << h << "," << patient_zero_ct << ",  ";
-    cerr << mean_sim << ",";
-    cerr << median_sim << ",";
-    cerr << sd_sim << ",";
-    cerr << skew_sim << ",";
-    cerr << acm_sim[0] << ",";
-    cerr << acm_sim[1] << ",";
-    cerr << acm_sim[2] << ",";
-    cerr << acm_sim[3];
-    cerr << endl;*/
 
-    vector<double> variables(12);
-/*    variables[0] = R_zero;
-    variables[1] = Ih;
-    variables[2] = h;
-    variables[3] = patient_zero_ct;
-    variables[4] = mean_sim;
-    variables[5] = median_sim;
-    variables[6] = sd_sim;
-    variables[7] = skew_sim;
-    variables[8] = acm_sim[0];
-    variables[9] = acm_sim[1];
-    variables[10] = acm_sim[2];
-    variables[11] = acm_sim[3];
-*/ 
-    return variables;
+    return;
 }
 
 
