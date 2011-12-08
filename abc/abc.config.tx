@@ -1,4 +1,4 @@
-data_file	texas.csv
+observed_data_file	texas.csv
 network_size	10000
 burnin	20
 sample_size	6000
