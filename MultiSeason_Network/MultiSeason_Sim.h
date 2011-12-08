@@ -1,7 +1,7 @@
 #ifndef MULTISEASON_SIM_H
 #define MULTISEASON_SIM_H
 
-#include "/home/tjhladish/work/EpiFire/src/Percolation_Sim.h"
+#include "Percolation_Sim.h"
 //#include <assert.h>
 //#include <queue>
 

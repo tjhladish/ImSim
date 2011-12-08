@@ -1,5 +1,5 @@
-INCLUDE = -I /home/tjhladish/work/EpiFire/src
-LDFLAGS = /home/tjhladish/work/EpiFire/src/*.o
+INCLUDE = -I $(HOME)/EpiFire/src
+LDFLAGS = $(HOME)/EpiFire/src/*.o
 
 all: epi_sim_abc
 
