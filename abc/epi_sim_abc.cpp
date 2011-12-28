@@ -53,33 +53,25 @@ const int P0_hard_max = 1000;
 const double h_hard_min  = 0.0;
 const double h_hard_max  = 1.0;
 
-int NET_SIZE;     // size of network to use
-int patient_zero_ct; // number of infections to introduce (usually 1)
-double R_zero; //r0 value for epidemic
+//int NET_SIZE;     // size of network to use
+//int patient_zero_ct; // number of infections to introduce (usually 1)
+//double R_zero; //r0 value for epidemic
 
 enum DistType { POI, EXP, POW, URB, CON}; // specifies which degree distribution to use: poisson, exponential, powerlaw, urban, or constant
 DistType dist = URB;
 
-double Ih; // Immunity halflife
-int burnin;
-double h; // hospitalization/doctor visit rate
+//double Ih; // Immunity halflife
+//int burnin;
+//double h; // hospitalization/doctor visit rate
 string observed_data_filename;
 
-void generate_network(Network* net, MultiSeason_Sim* sim);
+void generate_network(Network* net, Parameters &par, double R_zero, MultiSeason_Sim* sim);
 void connect_network (Network* net);
 void load_observed_data(string filename, char sep, map<string, vector<float> > &data);
-double KS(vector<float>s1, vector<float>s2);
 void report_metrics(map<string, vector<float> > s1, map<string, vector<float> > s2);
-//double autocorrelation_score( vector<float>s1, vector<float>s2 );
 vector<double> autocorrelation_matrix( map<string, vector<float> >& data );
 Doubled_variances calculate_doubled_variances( vector<Particle> particle_set );
 vector<double> calculate_predictive_prior_weights(vector<Particle> predictive_prior, int set_num); 
-
-//float obs_R0 = 3;   // estimated from Vynnycky et al 2007. Estimates of the reproduction numbers of Spanish influenza using morbidity data
-//float obs_R  = 1.3; // from Chowell et al 2007. Seasonal Influenza in the United States, France, and Australia: Transmission and prospects for control
-
-float controlB[] = {1.26, 0.34, 0.70, 1.75, 50.57, 1.55, 0.08, 0.42, 0.50, 3.20, 0.15, 0.49, 0.95, 0.24, 1.37, 0.17, 6.98, 0.10, 0.94, 0.38 };
-float treatmentB[] = {2.37, 2.16, 14.82, 1.73, 41.04, 0.23, 1.32, 2.91, 39.41, 0.11, 27.44, 4.51, 0.51, 4.50, 0.18, 14.68, 4.66, 1.30, 2.06, 1.19};
 double uniform_pdf(double a, double b) { return 1.0 / fabs(b-a); }
 
 vector<float> flatten_map(map<string, vector<float> > data) {
@@ -316,26 +308,6 @@ void sample_predictive_prior(int set_num, vector<Particle> &particles, int sampl
     return;
 }
 
-/*
-vector<double> determine_weights(int particles_in_prior) {
-    const double N = (double) particles_in_prior;
-    vector<double> weights;
-    int set_num = determine_set_number();
-    switch (set_num) {
-        case 0:
-            break;
-        case 1:
-            weights.clear();
-            weights.resize((int) N, 1.0/N);
-            break;
-        default:
-            cerr << "determine weights is not fully implemented\n";
-            break;
-    }
-        
-    return weights;
-}*/
-
 
 Doubled_variances calculate_doubled_variances( vector<Particle> particle_set ) {
     int set_size = particle_set.size();
@@ -385,19 +357,6 @@ vector<double> calculate_predictive_prior_weights(vector<Particle> predictive_pr
                            * normal_pdf(predictive_prior[i].Ih, old_predictive_prior[j].Ih, old_par_2var.Ih)
                            * normal_pdf(predictive_prior[i].P0, old_predictive_prior[j].P0, old_par_2var.P0)
                            * normal_pdf(predictive_prior[i].h,  old_predictive_prior[j].h,  old_par_2var.h);
-/*
-                 denominator = 1; // DEBUGGING, DELETE LATER
-                 cerr << predictive_prior[i].P0 
-                 << " " << old_predictive_prior[j].P0 
-                 << " " << old_par_2var.P0 
-                 << " " << normal_pdf(predictive_prior[i].P0, old_predictive_prior[j].P0, old_par_2var.P0)
-                 << endl;
-            cerr << old_predictive_prior_weights[j]
-                 << " " << normal_pdf(predictive_prior[i].R0, old_predictive_prior[j].R0, old_par_2var.R0)
-                 << " " << normal_pdf(predictive_prior[i].Ih, old_predictive_prior[j].Ih, old_par_2var.Ih)
-                 << " " << normal_pdf(predictive_prior[i].P0, old_predictive_prior[j].P0, old_par_2var.P0)
-                 << " " << normal_pdf(predictive_prior[i].h,  old_predictive_prior[j].h,  old_par_2var.h) << endl;
-                 */
         }
         predictive_prior_weights[i] = numerator / denominator;
     }
@@ -442,68 +401,72 @@ int main(int argc, char* argv[]) {
         sample_predictive_prior(set_num, particles, par.sample_size, &mtrand);
     }
 
-    for (unsigned int i = 0; i < particles.size(); i++) {
+    /*for (unsigned int i = 0; i < particles.size(); i++) {
         cerr << particles[i].R0 << " " << particles[i].Ih << " " << particles[i].h << " " << particles[i].P0 << endl;
-    }
+    }*/
 
-exit(0);
-
-    map<string, vector<float> > sim_data;
-    map<string, vector<float> > R0_vals;
     map<string, vector<float> > obs_data; //string = location, float = incidence on [0,1]
-
     load_observed_data(par.observed_data_file, ',', obs_data);
 
-    Network* net = new Network("EpiNet", Network::Undirected);
-    MultiSeason_Sim* sim = new MultiSeason_Sim(net, Ih);
-    generate_network(net, sim);
-    double new_R_zero = R_zero;
+    for (unsigned int i = 0; i < particles.size(); i++) {
+        const double R_zero       = particles[i].R0;
+        const double Ih           = particles[i].Ih;
+        const double h            = particles[i].h;
+        const int patient_zero_ct = particles[i].P0;
+        const int burnin          = par.burnin;
+        const int net_size        = par.network_size;
 
-    map<string, vector<float> >::iterator it;
+        map<string, vector<float> > sim_data;
+        map<string, vector<float> > R0_vals;
 
-    for ( it = obs_data.begin(); it != obs_data.end(); it++ ) {
-        double Tc_actual = sim->calc_critical_transmissibility();
-        string loc = (*it).first;
-        const int obs_N = obs_data[loc].size();
+        Network* net = new Network("EpiNet", Network::Undirected);
+        MultiSeason_Sim* sim = new MultiSeason_Sim(net, Ih);
+        generate_network(net, par, R_zero, sim);
+        double new_R_zero = R_zero;
 
-        sim_data[loc].resize(obs_N);
-        R0_vals[loc].resize(obs_N);
+        map<string, vector<float> >::iterator it;
 
-        for ( int season = 0; season < burnin + obs_N; season++) {
-            sim->rand_infect(patient_zero_ct);
-            sim->run_simulation();
-                                    
-            if (season >= burnin) {
-                // epi size in percent, reduced by hospitalization factor
-                const double transmitted_size = double(sim->epidemic_size() - patient_zero_ct)/(NET_SIZE - patient_zero_ct);
-                sim_data[loc][season - burnin] =  h * transmitted_size;
-                R0_vals[loc][season - burnin]  = new_R_zero;
-                //cerr << "* ";
+        for ( it = obs_data.begin(); it != obs_data.end(); it++ ) {
+            double Tc_actual = sim->calc_critical_transmissibility();
+            string loc = (*it).first;
+            const int obs_N = obs_data[loc].size();
+
+            sim_data[loc].resize(obs_N);
+            R0_vals[loc].resize(obs_N);
+
+            for ( int season = 0; season < burnin + obs_N; season++) {
+                sim->rand_infect(patient_zero_ct);
+                sim->run_simulation();
+                                        
+                if (season >= burnin) {
+                    // epi size in percent, reduced by hospitalization factor
+                    const double transmitted_size = double(sim->epidemic_size() - patient_zero_ct)/(net_size - patient_zero_ct);
+                    sim_data[loc][season - burnin] =  h * transmitted_size;
+                    R0_vals[loc][season - burnin]  = new_R_zero;
+                    //cerr << "* ";
+                }
+                //cerr << burnin << " " << season << " " << new_R_zero << endl;
+
+                // now calculate what R_zero will be at the start of the next season
+                vector<double> average_tk;
+                double average_t = 0;
+                sim->calculate_average_transmissibility(average_tk, average_t);
+                new_R_zero = average_t / Tc_actual;
             }
-            //cerr << burnin << " " << season << " " << new_R_zero << endl;
-
-            // now calculate what R_zero will be at the start of the next season
-            vector<double> average_tk;
-            double average_t = 0;
-            sim->calculate_average_transmissibility(average_tk, average_t);
-            new_R_zero = average_t / Tc_actual;
+            sim->reset();
+            new_R_zero = R_zero;
         }
-        sim->reset();
-        new_R_zero = R_zero;
+        // Report parameters
+        cout << particles[i].R0 << " " << particles[i].Ih << " " << particles[i].h << " " << particles[i].P0 << " ";
+        report_metrics(sim_data, R0_vals);
+        //vector<float> r0_flat = flatten_map(R0_vals); 
+        //cerr_vector(r0_flat ); cerr << endl;
     }
-    // Report parameters
-    cout << "R0 " << R_zero;
-    cout << " Ih " << Ih;
-    cout << " h " << h;
-    cout << " P0 " << patient_zero_ct;
-    report_metrics(sim_data, R0_vals);
-    //vector<float> r0_flat = flatten_map(R0_vals); 
-    //cerr_vector(r0_flat ); cerr << endl;
     return 0;
 }
 
-void generate_network(Network* net, MultiSeason_Sim* sim) {
-    net->populate(NET_SIZE);
+void generate_network(Network* net, Parameters &par, double R_zero, MultiSeason_Sim* sim) {
+    net->populate(par.network_size);
     connect_network(net); // connect network using the parameters above
     sim->calc_naive_transmissibility(R_zero); //calculates correct T for this network topology
 }
@@ -539,26 +502,6 @@ void load_observed_data(string filename, char sep, map<string, vector<float> > &
     return;
 }
 
-double KS(vector<float>s1, vector<float>s2) {
-    double D = 0;
-    int s1size = s1.size();
-    int s2size = s2.size();
-
-    sort(s1.begin(), s1.end());
-    sort(s2.begin(), s2.end());
-
-    s1.push_back(numeric_limits<float>::infinity());
-    s2.push_back(numeric_limits<float>::infinity());
-
-    int i=0; int j=0;
-    while( i < s1size-1 || j < s2size-1) {
-        if (s1[i] < s2[j]) i++;
-        else if (s1[i] > s2[j]) j++;
-        else { i++; j++; }
-        D = max(D, fabs(float(i)/s1size - float(j)/s2size));
-     }
-    return D;
-}
 
 vector<double> autocorrelation_matrix(map<string, vector<float> > &data) {
     map<string, vector<float> >::iterator it;
@@ -600,18 +543,25 @@ vector<double> autocorrelation_matrix(map<string, vector<float> > &data) {
 }
 
 void report_metrics(map<string, vector<float> > sim, map<string, vector<float> > Re_values) {
+    // obs_mean, obs_median, obs_max, obs_range, obs_sd, obs_skew, obs_ss, obs_ll, obs_sl, obs_ls
     vector<float> sim_flat = flatten_map( sim );
     vector<float> Re_flat  = flatten_map( Re_values );
 
     double mean_sim = mean(sim_flat);
     double median_sim = median(sim_flat);
-    double skew_sim = mean_sim - median_sim;
+    double max_sim = max_element(sim_flat); 
+    double range_sim = range(sim_flat); 
     double sd_sim = stdev(sim_flat);
+    double skew_sim = mean_sim - median_sim;
     vector<double> acm_sim = autocorrelation_matrix(sim);
 
     float epi_threshold = 0.05;
     double mean_Re = calculate_mean_effective_R (sim_flat, Re_flat, epi_threshold);
+    cout << mean_sim   << " " << median_sim << " " << max_sim    << " " << range_sim  << " "
+         << sd_sim     << " " << skew_sim   << " " << acm_sim[0] << " " << acm_sim[1] << " "
+         << acm_sim[2] << " " << acm_sim[3] << " " << mean_Re << endl;
 
+    /*
     cout << " mean " << mean_sim;
     cout << " median " << median_sim;
     cout << " sd " << sd_sim;
@@ -621,6 +571,7 @@ void report_metrics(map<string, vector<float> > sim, map<string, vector<float> >
     cout << " sl " << acm_sim[2];
     cout << " ls " << acm_sim[3];
     cout << " Re " << mean_Re;
+    */
 
     return;
 }
