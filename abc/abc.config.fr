@@ -1,0 +1,16 @@
+observed_data_file	france.csv
+network_size	100000
+burnin	20
+sample_size	50
+epsilon	0.02
+threads	6
+obs_mean	0.0483716190476
+obs_median	0.044
+obs_max	0.1084
+obs_range	0.0950476190476
+obs_sd	0.0255449427004
+obs_skew	0.00437161904762
+obs_ss	0.371031746032
+obs_ll	0.232142857143
+obs_sl	0.19246031746
+obs_ls	0.204365079365
