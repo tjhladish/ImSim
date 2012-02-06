@@ -12,7 +12,7 @@ class MultiSeason_Cluster_Sim: public Percolation_Sim
         if (last_cluster == 0) {
             return 1.0;
         } else {
-            return pow(CI, Cluster - last_cluster);
+            return 1.0 - pow(CI, Cluster - last_cluster);
         }
     } 
 
@@ -20,10 +20,10 @@ class MultiSeason_Cluster_Sim: public Percolation_Sim
 
     public:
         MultiSeason_Cluster_Sim():Percolation_Sim() {}
-        MultiSeason_Cluster_Sim(Network* net, double CI):Percolation_Sim(net) { this->CI = CI; }
+        MultiSeason_Cluster_Sim(Network* net):Percolation_Sim(net) {}
         
-        void set_crossimmunity(int ci) {CI = ci;}
-        int get_crossimmunity() {return CI;}
+        void set_crossimmunity(double ci) {CI = ci;}
+        double get_crossimmunity() {return CI;}
         
         void set_cluster(int cluster) {Cluster = cluster;}
         int get_cluster() {return Cluster;}
