@@ -2,16 +2,16 @@
                           # Use Bash Shell
 #$ -V                     # Inherit the submission environment 
 #$ -cwd                   # Start job in  submission directory
-#$ -N epi_abc_run         # Job Name
+#$ -N epi_cluster_run     # Job Name
 #$ -j n                   # combine stderr & stdout into stdout  
 #$ -o $JOB_NAME.o$JOB_ID  # Name of the output file (eg. myMPI.oJobID)
-#$ -pe 16way 2048         # Requests 16 cores/node, 32 cores total
-#$ -q normal              # Queue name
-#$ -l h_rt=01:30:00       # Run time (hh:mm:ss) - 1.5 hours
+#$ -pe 16way 256          # Requests 16 cores/node, 32 cores total
+#$ -q development        # Queue name
+#$ -l h_rt=02:00:00       # Run time (hh:mm:ss) - 1.5 hours
 #$ -M tjhladish@gmail.com # Email notification address (UNCOMMENT)
 #$ -m be                  # Email at Begin/End of job  (UNCOMMENT)
 
 
                           # Run the MPI executable named "a.out"
-ibrun ./epi_sim_abc_mpi abc.config.fr
+ibrun ./epi_cluster_abc_mpi abc.config.fr
 
