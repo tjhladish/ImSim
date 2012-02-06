@@ -105,7 +105,7 @@ void process_config_file (string config_filename, Parameters &p, int rank) {
 
     if (myfile.is_open()) {
         string line;
-        char sep = '\t';
+        char sep = ' ';
 
         while ( getline(myfile, line) ) {
             vector<string> fields;
@@ -173,12 +173,12 @@ vector<Particle> read_predictive_prior_file(int set_num) {
             Particle p;
 
             const char whitespace[] = " \n\t\r";
-            string R0_str = strip( fields[0], whitespace ); 
-            string CI_str = strip( fields[1], whitespace ); 
-            string CLambda_str = strip( fields[2], whitespace ); 
-            string COffset_str = strip( fields[3], whitespace ); 
-            string h_str  = strip( fields[4], whitespace ); 
-            string P0_str = strip( fields[5], whitespace ); 
+            string R0_str = strip( fields[2], whitespace ); 
+            string CI_str = strip( fields[3], whitespace ); 
+            string CLambda_str = strip( fields[4], whitespace ); 
+            string COffset_str = strip( fields[5], whitespace ); 
+            string h_str  = strip( fields[6], whitespace ); 
+            string P0_str = strip( fields[7], whitespace ); 
 
             p.R0 = to_double( R0_str );
             p.CI = to_double( CI_str );
@@ -424,7 +424,6 @@ int main(int argc, char* argv[]) {
     
     if (argc < 2) { fprintf(stderr, "Provide configuration file name as a parameter\n"); }
     string config_file_name( argv[1] );
-
     // Process configuration file
     Parameters par;
     process_config_file(config_file_name, par, rank);
@@ -450,13 +449,13 @@ int main(int argc, char* argv[]) {
     /*for (unsigned int i = 0; i < particles.size(); i++) {
         fprintf( stderr, "%d %d %g %g %g %d\n", rank, i, particles[i].R0, particles[i].Ih, particles[i].h, particles[i].P0);
     }*/
-
     Network* net = new Network("EpiNet", Network::Undirected);
+    MultiSeason_Cluster_Sim* sim = new MultiSeason_Cluster_Sim(net);
     for (unsigned int i = 0; i < particles.size(); i++) {
         const double R_zero       = particles[i].R0;
         const double CI           = particles[i].CI;
         const double CLambda      = particles[i].CLambda;
-        const double COffset      = particles[i].COffset;
+        const int COffset      = particles[i].COffset;
         const double h            = particles[i].h;
         const int patient_zero_ct = particles[i].P0;
         const int burnin          = par.burnin;
@@ -465,7 +464,8 @@ int main(int argc, char* argv[]) {
         map<string, vector<float> > sim_data;
         map<string, vector<float> > R0_vals;
 
-        MultiSeason_Cluster_Sim* sim = new MultiSeason_Cluster_Sim(net, CI);
+        sim->set_crossimmunity(CI);
+        net->clear_nodes();
         generate_network(net, par, R_zero, sim);
         double new_R_zero = R_zero;
 
@@ -473,7 +473,6 @@ int main(int argc, char* argv[]) {
         const vector<double> cluster_pmf = calculate_cluster_pmf(CLambda, COffset, max_cluster_duration);
 
         map<string, vector<float> >::iterator it;
-
         // For each location that we are simulating
         for ( it = obs_data.begin(); it != obs_data.end(); it++ ) {
             double Tc_actual = sim->calc_critical_transmissibility();
@@ -522,9 +521,8 @@ int main(int argc, char* argv[]) {
         }
         // Report parameters
         report_particles(rank, i, particles[i], sim_data, R0_vals);
-        delete sim;
     }
-
+    delete sim;
     delete net;
     //fprintf( stderr, "%d done\n", rank );
     MPI_Finalize();
