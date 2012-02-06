@@ -1,3 +1,6 @@
+#include "mpi.h"
+#include <stdio.h>
+
 #include "../MultiSeason_Network/MultiSeason_Sim.h"
 #include <time.h>
 #include <stdlib.h>
@@ -42,33 +45,11 @@ const int P0_max = 256;
 const double h_min  = 0.0;
 const double h_max  = 1.0;
 
-// Don't consider values outside of these bounds
-// (because they would be nonsensical or would cause simulator to crash)
-const double R0_hard_min = 0.0;
-const double R0_hard_max = 1000.0;
-const double Ih_hard_min = 0.00001;
-const double Ih_hard_max = 10000.0;
-const int P0_hard_min = 1;
-const int P0_hard_max = 1000;
-const double h_hard_min  = 0.0;
-const double h_hard_max  = 1.0;
-
-//int NET_SIZE;     // size of network to use
-//int patient_zero_ct; // number of infections to introduce (usually 1)
-//double R_zero; //r0 value for epidemic
-
 enum DistType { POI, EXP, POW, URB, CON}; // specifies which degree distribution to use: poisson, exponential, powerlaw, urban, or constant
-DistType dist = URB;
-
-//double Ih; // Immunity halflife
-//int burnin;
-//double h; // hospitalization/doctor visit rate
-string observed_data_filename;
 
 void generate_network(Network* net, Parameters &par, double R_zero, MultiSeason_Sim* sim);
 void connect_network (Network* net);
 void load_observed_data(string filename, char sep, map<string, vector<float> > &data);
-void report_metrics(map<string, vector<float> > s1, map<string, vector<float> > s2);
 vector<double> autocorrelation_matrix( map<string, vector<float> >& data );
 Doubled_variances calculate_doubled_variances( vector<Particle> particle_set );
 vector<double> calculate_predictive_prior_weights(vector<Particle> predictive_prior, int set_num); 
@@ -95,12 +76,11 @@ void connect_network (Network* net) {
     net->rand_connect_user(dist);
 }
 
-double calculate_mean_effective_R (vector<float> epi_values, vector<float> Re_values, float threshold) {
+double calculate_mean_effective_R (vector<float> epi_values, vector<float> Re_values) {
     int n = 0;
     double running_sum = 0.0;
     for ( unsigned int i = 0; i < epi_values.size(); i++) {
         if (Re_values[i] > 1) {
-        //if (epi_values[i] > threshold) {
             running_sum += Re_values[i];
             n++;
         }
@@ -112,7 +92,7 @@ double calculate_mean_effective_R (vector<float> epi_values, vector<float> Re_va
     }
 }
 
-void process_config_file (string config_filename, Parameters &p) {
+void process_config_file (string config_filename, Parameters &p, int rank) {
 
     std::map<string,string> tmp_par;
     ifstream myfile(config_filename.c_str());
@@ -120,12 +100,13 @@ void process_config_file (string config_filename, Parameters &p) {
 
     if (myfile.is_open()) {
         string line;
-        char sep = '\t';
+        char sep = ' ';
 
         while ( getline(myfile, line) ) {
             vector<string> fields;
             split(line, sep, fields);
 
+            if (fields.size() != 2) fprintf( stderr, "Config file problem: wrong number of fields (%d instead of 2).  Line: %s\n", (int) fields.size(), line.c_str() );
             const char whitespace[] = " \n\t\r";
             string key =   strip( fields[0], whitespace ); 
             string value = strip( fields[1], whitespace ); 
@@ -133,7 +114,7 @@ void process_config_file (string config_filename, Parameters &p) {
             tmp_par[ key ] = value;
         }
     } else {
-        cerr << "Failed to open parameter file\n";
+        fprintf( stderr, "Failed to open parameter file\n" );
         exit(102);
     }
 
@@ -141,8 +122,6 @@ void process_config_file (string config_filename, Parameters &p) {
     p.network_size = to_int( tmp_par["network_size"] );
     p.burnin       = to_int( tmp_par["burnin"] );
     p.sample_size  = to_int( tmp_par["sample_size"] );  
-    p.epsilon      = to_double( tmp_par["epsilon"] );
-    p.threads      = to_int( tmp_par["threads"] );
     p.obs_mean     = to_double( tmp_par["obs_mean"] );
     p.obs_median   = to_double( tmp_par["obs_median"] );
     p.obs_max      = to_double( tmp_par["obs_max"] );
@@ -202,7 +181,7 @@ vector<Particle> read_predictive_prior_file(int set_num) {
             predictive_prior.push_back(p);
         }
     } else {
-        cerr << "Failed to open parameter file\n";
+        fprintf( stderr, "Failed to open predictive prior file\n" );
         exit(103);
     }
     return predictive_prior;
@@ -280,7 +259,7 @@ double rand_trunc_normal(double mu, double sigma_squared, double min, double max
 }
                                 
 
-void sample_predictive_prior(int set_num, vector<Particle> &particles, int sample_size, MTRand* mtrand) {
+void sample_predictive_prior(const int set_num, vector<Particle> &particles, const int sample_size, MTRand* mtrand, const int mpi_rank) {
     // Read in predictive prior from the last set.
     // We need to calculate the proper weights for the predictive prior so that we know how to sample from it.
     vector<Particle> predictive_prior = read_predictive_prior_file( set_num - 1 );
@@ -294,16 +273,16 @@ void sample_predictive_prior(int set_num, vector<Particle> &particles, int sampl
         // weights from set - 2 are needed to calculate weights for set - 1
         weights = calculate_predictive_prior_weights( predictive_prior, set_num );
     }
-    write_weights_file( weights, set_num - 1 );
+    if (mpi_rank == 0) write_weights_file( weights, set_num - 1 );
 
     particles.resize(sample_size);
     for (int i = 0; i < sample_size; i++) {
         // Select a particle index j to use from the predictive prior
         int j = rand_nonuniform_int( weights, mtrand );
-        particles[i].R0 = rand_trunc_normal( predictive_prior[ j ].R0, sampling_variance.R0, R0_hard_min, R0_hard_max, mtrand ); 
-        particles[i].Ih = rand_trunc_normal( predictive_prior[ j ].Ih, sampling_variance.Ih, Ih_hard_min, Ih_hard_max, mtrand ); 
-        particles[i].h  = rand_trunc_normal( predictive_prior[ j ].h,  sampling_variance.h,  h_hard_min,  h_hard_max,  mtrand ); 
-        particles[i].P0 = (int) (rand_trunc_normal( predictive_prior[ j ].P0, sampling_variance.P0, P0_hard_min, P0_hard_max, mtrand ) + 0.5);
+        particles[i].R0 = rand_trunc_normal( predictive_prior[ j ].R0, sampling_variance.R0, R0_min, R0_max, mtrand ); 
+        particles[i].Ih = rand_trunc_normal( predictive_prior[ j ].Ih, sampling_variance.Ih, Ih_min, Ih_max, mtrand ); 
+        particles[i].h  = rand_trunc_normal( predictive_prior[ j ].h,  sampling_variance.h,  h_min,  h_max,  mtrand ); 
+        particles[i].P0 = (int) (rand_trunc_normal( predictive_prior[ j ].P0, sampling_variance.P0, P0_min, P0_max, mtrand ) + 0.5);
     }
     return;
 }
@@ -364,6 +343,46 @@ vector<double> calculate_predictive_prior_weights(vector<Particle> predictive_pr
     return normalize_dist( predictive_prior_weights );
 }
 
+void report_particles(int rank, int run, Particle &particle, map<string, vector<float> > sim, map<string, vector<float> > Re_values) {
+    // obs_mean, obs_median, obs_max, obs_range, obs_sd, obs_skew, obs_ss, obs_ll, obs_sl, obs_ls
+    vector<float> sim_flat = flatten_map( sim );
+    vector<float> Re_flat  = flatten_map( Re_values );
+
+    double mean_sim = mean(sim_flat);
+    double median_sim = median(sim_flat);
+    double max_sim = max_element(sim_flat); 
+    double range_sim = range(sim_flat); 
+    double sd_sim = stdev(sim_flat);
+    double skew_sim = mean_sim - median_sim;
+    vector<double> acm_sim = autocorrelation_matrix(sim);
+
+    double mean_Re = calculate_mean_effective_R (sim_flat, Re_flat);
+    //cout << particles[i].R0 << " " << particles[i].Ih << " " << particles[i].h << " " << particles[i].P0 << " ";
+    fprintf( stderr, "%d %d   %g %g %g %d   %g %g %g %g %g %g   %g %g %g %g   %g\n", 
+        rank, run,
+        particle.R0, particle.Ih, particle.h, particle.P0,
+        mean_sim, median_sim, max_sim, range_sim, sd_sim, skew_sim,
+        acm_sim[0], acm_sim[1], acm_sim[2], acm_sim[3],
+        mean_Re);
+        
+    /*
+    cout << mean_sim   << " " << median_sim << " " << max_sim    << " " << range_sim  << " "
+         << sd_sim     << " " << skew_sim   << " " << acm_sim[0] << " " << acm_sim[1] << " "
+         << acm_sim[2] << " " << acm_sim[3] << " " << mean_Re << endl;
+
+    cout << " mean " << mean_sim;
+    cout << " median " << median_sim;
+    cout << " sd " << sd_sim;
+    cout << " skew " << skew_sim;
+    cout << " ss " << acm_sim[0];
+    cout << " ll " << acm_sim[1];
+    cout << " sl " << acm_sim[2];
+    cout << " ls " << acm_sim[3];
+    cout << " Re " << mean_Re;
+    */
+
+    return;
+}
 
 /*
 Determine run number: what is the last predictive_prior.X file? (or does one not exist->first run)
@@ -380,34 +399,44 @@ calculate and output weights for last run; output particles.
 
 
 int main(int argc, char* argv[]) {
-    if (argc < 2) { cerr << "Provide configuration file name as a parameter\n"; }
+    MPI_Init(&argc, &argv);
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    //fprintf(stderr, " %d starting\n", rank );
+    if (rank == 0 ) { fprintf(stderr, "rank run   R0 Ih h P0   mean median max range sd skew   ss ll sl ls   mean_R0\n" ); }
+    
+    if (argc < 2) { fprintf(stderr, "Provide configuration file name as a parameter\n"); }
     string config_file_name( argv[1] );
 
     // Process configuration file
     Parameters par;
-    process_config_file(config_file_name, par);
+    process_config_file(config_file_name, par, rank);
 
     // Determine which ABC set we're supposed to run
     const int set_num = determine_set_number();
 
     // Determine what parameter combinations we will try
     static MTRand mtrand;
+    //static MTRand mtrand(123456);
     vector<Particle> particles;
     if (set_num == 0) {
         // sample naive priors
         sample_prior(particles, par.sample_size, &mtrand);
     } else {
         // sample predictive priors based on last set
-        sample_predictive_prior(set_num, particles, par.sample_size, &mtrand);
+        sample_predictive_prior(set_num, particles, par.sample_size, &mtrand, rank);
     }
-
-    /*for (unsigned int i = 0; i < particles.size(); i++) {
-        cerr << particles[i].R0 << " " << particles[i].Ih << " " << particles[i].h << " " << particles[i].P0 << endl;
-    }*/
 
     map<string, vector<float> > obs_data; //string = location, float = incidence on [0,1]
     load_observed_data(par.observed_data_file, ',', obs_data);
 
+    /*for (unsigned int i = 0; i < particles.size(); i++) {
+        fprintf( stderr, "%d %d %g %g %g %d\n", rank, i, particles[i].R0, particles[i].Ih, particles[i].h, particles[i].P0);
+    }*/
+
+    Network* net = new Network("EpiNet", Network::Undirected);
+    MultiSeason_Sim* sim = new MultiSeason_Sim(net);
     for (unsigned int i = 0; i < particles.size(); i++) {
         const double R_zero       = particles[i].R0;
         const double Ih           = particles[i].Ih;
@@ -419,8 +448,8 @@ int main(int argc, char* argv[]) {
         map<string, vector<float> > sim_data;
         map<string, vector<float> > R0_vals;
 
-        Network* net = new Network("EpiNet", Network::Undirected);
-        MultiSeason_Sim* sim = new MultiSeason_Sim(net, Ih);
+        sim->set_immunity_halflife(Ih);
+        net->clear_nodes();
         generate_network(net, par, R_zero, sim);
         double new_R_zero = R_zero;
 
@@ -443,9 +472,7 @@ int main(int argc, char* argv[]) {
                     const double transmitted_size = double(sim->epidemic_size() - patient_zero_ct)/(net_size - patient_zero_ct);
                     sim_data[loc][season - burnin] =  h * transmitted_size;
                     R0_vals[loc][season - burnin]  = new_R_zero;
-                    //cerr << "* ";
                 }
-                //cerr << burnin << " " << season << " " << new_R_zero << endl;
 
                 // now calculate what R_zero will be at the start of the next season
                 vector<double> average_tk;
@@ -457,11 +484,12 @@ int main(int argc, char* argv[]) {
             new_R_zero = R_zero;
         }
         // Report parameters
-        cout << particles[i].R0 << " " << particles[i].Ih << " " << particles[i].h << " " << particles[i].P0 << " ";
-        report_metrics(sim_data, R0_vals);
-        //vector<float> r0_flat = flatten_map(R0_vals); 
-        //cerr_vector(r0_flat ); cerr << endl;
+        report_particles(rank, i, particles[i], sim_data, R0_vals);
     }
+    delete sim;
+    delete net;
+    //fprintf( stderr, "%d done\n", rank );
+    MPI_Finalize();
     return 0;
 }
 
@@ -472,7 +500,6 @@ void generate_network(Network* net, Parameters &par, double R_zero, MultiSeason_
 }
 
 void load_observed_data(string filename, char sep, map<string, vector<float> > & obs_data) {
-    //cerr << "Reading observed data\n";
     ifstream myfile(filename.c_str());
 
     if (myfile.is_open()) {
@@ -486,10 +513,10 @@ void load_observed_data(string filename, char sep, map<string, vector<float> > &
 
             //format check
             if (fields.size() > 3 ) {
-                cerr << "Skipping line: too many fields: " << line << endl;
+                fprintf( stderr, "Skipping line: too many fields: %s\n", line.c_str() );
                 continue;
             } else if (fields.size() < 3 ) {
-                cerr << "Skipping line: too few fields: " << line << endl;
+                fprintf( stderr, "Skipping line: too few fields:  %s\n", line.c_str() );
                 continue;
             } else { 
                 string loc   = strip(fields[0],whitespace);
@@ -541,39 +568,4 @@ vector<double> autocorrelation_matrix(map<string, vector<float> > &data) {
     }
     return ac_matrix;
 }
-
-void report_metrics(map<string, vector<float> > sim, map<string, vector<float> > Re_values) {
-    // obs_mean, obs_median, obs_max, obs_range, obs_sd, obs_skew, obs_ss, obs_ll, obs_sl, obs_ls
-    vector<float> sim_flat = flatten_map( sim );
-    vector<float> Re_flat  = flatten_map( Re_values );
-
-    double mean_sim = mean(sim_flat);
-    double median_sim = median(sim_flat);
-    double max_sim = max_element(sim_flat); 
-    double range_sim = range(sim_flat); 
-    double sd_sim = stdev(sim_flat);
-    double skew_sim = mean_sim - median_sim;
-    vector<double> acm_sim = autocorrelation_matrix(sim);
-
-    float epi_threshold = 0.05;
-    double mean_Re = calculate_mean_effective_R (sim_flat, Re_flat, epi_threshold);
-    cout << mean_sim   << " " << median_sim << " " << max_sim    << " " << range_sim  << " "
-         << sd_sim     << " " << skew_sim   << " " << acm_sim[0] << " " << acm_sim[1] << " "
-         << acm_sim[2] << " " << acm_sim[3] << " " << mean_Re << endl;
-
-    /*
-    cout << " mean " << mean_sim;
-    cout << " median " << median_sim;
-    cout << " sd " << sd_sim;
-    cout << " skew " << skew_sim;
-    cout << " ss " << acm_sim[0];
-    cout << " ll " << acm_sim[1];
-    cout << " sl " << acm_sim[2];
-    cout << " ls " << acm_sim[3];
-    cout << " Re " << mean_Re;
-    */
-
-    return;
-}
-
 
