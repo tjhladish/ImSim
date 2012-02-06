@@ -1,5 +1,6 @@
 CC = mpicxx 
-CFLAGS = -fast
+CFLAGS = -O2
+#CFLAGS = -fast
 INCLUDE = -I $(HOME)/EpiFire/src
 LDFLAGS = $(HOME)/EpiFire/src/*.o
 
