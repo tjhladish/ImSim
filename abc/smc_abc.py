@@ -34,17 +34,7 @@ def read_config():
         config[k] = v
     return config
 
-def valid_pars(R0, Ih, P0, h):
-    if R0 < R0_min or R0 > R0_max:
-        return false
-    if Ih < Ih_min  or Ih > Ih_max:
-        return false
-    if P0 < P0_min or P0 > PO_max:
-        return false 
-    if h < h_min   or h > h_max:
-        return false
-    return true
-    
+   
 
 def sample_priors():
     # R0, Ih, P0, h
@@ -57,6 +47,18 @@ def sample_priors():
     return [R0, Ih, h, P0]
 
 
+'''
+def valid_pars(R0, Ih, P0, h):
+    if R0 < R0_min or R0 > R0_max:
+        return false
+    if Ih < Ih_min  or Ih > Ih_max:
+        return false
+    if P0 < P0_min or P0 > PO_max:
+        return false 
+    if h < h_min   or h > h_max:
+        return false
+    return true
+ 
 def trunc_gauss(mu, sigma, a, b):
     while 1:
         dev = gauss(mu, sigma) # mean and sd
@@ -102,6 +104,8 @@ def weight(theta, omega, tau_sq):
                        * gauss_pdf(theta[-2]['h'][j], sqrt(tau_sq[-1]['h']), theta[-1]['h'][-1]) 
     
     return numerator / denominator
+'''
+
 
 conf = read_config()
 prefix = ['./epi_sim_abc', str(conf['burnin']), str(conf['network_size'])]

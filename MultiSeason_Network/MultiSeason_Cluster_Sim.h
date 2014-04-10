@@ -19,8 +19,8 @@ class MultiSeason_Cluster_Sim: public Percolation_Sim
     inline int last_infecting_cluster(Node* node) {return node->get_state();}
 
     public:
-        MultiSeason_Cluster_Sim():Percolation_Sim() {}
-        MultiSeason_Cluster_Sim(Network* net):Percolation_Sim(net) {}
+        MultiSeason_Cluster_Sim():Percolation_Sim() { Cluster = 1; CI = 1.0; }
+        MultiSeason_Cluster_Sim(Network* net):Percolation_Sim(net) { Cluster = 1; CI = 1.0; }
         
         void set_crossimmunity(double ci) {CI = ci;}
         double get_crossimmunity() {return CI;}

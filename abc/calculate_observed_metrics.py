@@ -66,7 +66,7 @@ def autocorrelation_matrix(data, randomize_start=False):
         ac_matrix[k] = ac_matrix[k]/N
     return ac_matrix
 
-obs, obs_flattened = import_observed_data('texas.csv')
+obs, obs_flattened = import_observed_data('paris.csv')
 ac = autocorrelation_matrix(obs, False)
 print "mean, median, max, range, sd, skew, ac_ss, ac_ll, ac_sl, ac_ls"
 print mean(obs_flattened), median(obs_flattened), mean_max(obs), mean_range(obs), stdev(obs_flattened), skew(obs_flattened), ac['ss'], ac['ll'], ac['sl'], ac['ls'],
