@@ -89,7 +89,6 @@ class MSMSC_Sim: public Simulator {
             node->set_state(strain); // most recently infecting strain this year
             const int id = node->get_id();
             node_history[id][strain] = clusters[strain]; // update node's infection history
-            infected.push_back(node); // keep track to facilitate future transmission
             recent_infections[id][strain] = true;
         }
 
@@ -107,6 +106,7 @@ class MSMSC_Sim: public Simulator {
             for ( unsigned int i = 0; i < patients_zero.size(); ++i) {
                 const StrainType strain = infection_types[i];
                 infect( patients_zero[i], strain );
+                infected.push_back(patients_zero[i]); // keep track to facilitate future transmission
             };
             return patients_zero;
         }

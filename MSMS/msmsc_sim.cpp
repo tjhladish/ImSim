@@ -121,7 +121,7 @@ int main(int argc, char* argv[]) {
     vector<double> r_zeros(3, R_zero);
     sim->calc_naive_transmissibility(r_zeros); //calculates correct T for this network topology
     vector<Node*> patients_zero;
-    double new_R_zero = R_zero;
+    //double new_R_zero = R_zero;
     for ( int j = 0; j < j_max; j++) {
         cerr << "Repetition: " << j << endl;
         //double Tc_actual = sim->calc_critical_transmissibility();
